@@ -18,6 +18,7 @@ import pickle
 import matplotlib.pyplot as plt
 import os
 from keras.models import model_from_json
+import pyttsx3
 
 main = tkinter.Tk()#fake currency detection using image processing
 main.title("fake currency detection using image processing") #designing main screen
@@ -108,6 +109,16 @@ def predict():
     else:
         cv2.putText(img, 'Real', (10, 25),  cv2.FONT_HERSHEY_SIMPLEX,0.6, (0, 255, 255), 2)
         msg = 'Real'
+
+    engine = pyttsx3.init()
+    engine.setProperty('rate', 150)
+    engine.setProperty('volume', 1.0)
+    if msg == 'Fake':
+        engine.say('The currency is Fake')
+    else:
+        engine.say('The currency is Real')
+    engine.runAndWait()
+    engine.stop()
         
     cv2.imshow(msg,img)
     cv2.waitKey(0)

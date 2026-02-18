@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fake Currency Detection Using Image Processing</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            background-color: #B0C4DE;
+            min-height: 100vh;
+        }
+        .header {
+            background-color: #00BFFF;
+            color: white;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .btn {
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            font-family: 'Times New Roman', Times, serif;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .btn-upload { background-color: #4CAF50; color: white; }
+        .btn-upload:hover { background-color: #45a049; }
+        .btn-process { background-color: #2196F3; color: white; }
+        .btn-process:hover { background-color: #1976D2; }
+        .btn-model { background-color: #FF9800; color: white; }
+        .btn-model:hover { background-color: #F57C00; }
+        .btn-predict { background-color: #9C27B0; color: white; }
+        .btn-predict:hover { background-color: #7B1FA2; }
+        .btn-graph { background-color: #F44336; color: white; }
+        .btn-graph:hover { background-color: #D32F2F; }
+
+        .output-box {
+            background-color: white;
+            border: 2px solid #666;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 200px;
+            font-size: 14px;
+            font-family: 'Times New Roman', Times, serif;
+            font-weight: bold;
+            white-space: pre-wrap;
+            margin-bottom: 20px;
+        }
+        .result-section {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: flex-start;
+        }
+        .result-image {
+            border: 3px solid #333;
+            border-radius: 5px;
+            max-width: 450px;
+        }
+        .result-label {
+            font-size: 28px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .result-fake {
+            background-color: #f44336;
+            color: white;
+        }
+        .result-real {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #uploadForm {
+            display: none;
+            margin: 15px 0;
+            padding: 15px;
+            background: #e8e8e8;
+            border-radius: 5px;
+        }
+        #uploadForm input[type="file"] {
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .graph-canvas {
+            background: white;
+            border: 2px solid #666;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .voice-note {
+            font-size: 12px;
+            color: #555;
+            margin-top: 5px;
+        }
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid #ccc;
+            border-top: 3px solid #333;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .confidence-bar {
+            width: 200px;
+            height: 20px;
+            background: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .confidence-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        .confidence-text {
+            font-size: 14px;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+        .preview-img {
+            max-width: 200px;
+            max-height: 200px;
+            border: 2px solid #999;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        Detection of Fake Currency Using Image Processing
+    </div>
+
+    <div class="container">
+        <div class="button-row">
+            <button class="btn btn-upload" onclick="uploadDataset()">Upload Dataset</button>
+            <button class="btn btn-process" onclick="processImages()">Image Preprocessing</button>
+            <button class="btn btn-model" onclick="generateModel()">Generate CNN Model</button>
+            <button class="btn btn-predict" onclick="showUploadForm()">Upload Test Image</button>
+            <button class="btn btn-graph" onclick="showGraph()">Accuracy & Loss Graph</button>
+        </div>
+
+        <div id="uploadForm">
+            <form id="predictForm" enctype="multipart/form-data">
+                <input type="file" id="imageFile" name="file" accept="image/*" onchange="previewImage(this)">
+                <button type="submit" class="btn btn-predict" id="detectBtn">Detect Currency</button>
+                <div id="imagePreview"></div>
+            </form>
+        </div>
+
+        <div class="output-box" id="outputBox">Welcome to Fake Currency Detection System. Click the buttons above to begin.</div>
+
+        <div id="resultArea"></div>
+
+        <canvas id="graphCanvas" class="graph-canvas" style="display:none;" width="800" height="400"></canvas>
+    </div>
+
+    <script>
+        function setLoading(text) {
+            var box = document.getElementById('outputBox');
+            box.innerHTML = '<span class="spinner"></span> ' + text;
+        }
+
+        function appendOutput(text) {
+            var box = document.getElementById('outputBox');
+            box.textContent = text;
+        }
+
+        function previewImage(input) {
+            var preview = document.getElementById('imagePreview');
+            if (input.files && input.files[0]) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.innerHTML = '<img class="preview-img" src="' + e.target.result + '">';
+                };
+                reader.readAsDataURL(input.files[0]);
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
+        function uploadDataset() {
+            setLoading('Loading dataset...');
+            fetch('/upload_dataset', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { appendOutput(data.message); })
+                .catch(function(err) { appendOutput('Error: ' + err); });
+        }
+
+        function processImages() {
+            setLoading('Preprocessing images...');
+            fetch('/upload_dataset', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { appendOutput(data.message); })
+                .catch(function(err) { appendOutput('Error: ' + err); });
+        }
+
+        function generateModel() {
+            setLoading('Generating CNN Model... Please wait.');
+            fetch('/generate_model', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) { appendOutput(data.message); })
+                .catch(function(err) { appendOutput('Error: ' + err); });
+        }
+
+        function showUploadForm() {
+            var form = document.getElementById('uploadForm');
+            form.style.display = form.style.display === 'block' ? 'none' : 'block';
+            document.getElementById('graphCanvas').style.display = 'none';
+        }
+
+        document.getElementById('predictForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            var fileInput = document.getElementById('imageFile');
+            var detectBtn = document.getElementById('detectBtn');
+            if (!fileInput.files.length) {
+                appendOutput('Please select an image file first.');
+                return;
+            }
+            var formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            setLoading('Detecting currency... Please wait.');
+            detectBtn.disabled = true;
+            document.getElementById('resultArea').innerHTML = '';
+
+            fetch('/predict', { method: 'POST', body: formData })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    detectBtn.disabled = false;
+                    if (data.status === 'success') {
+                        appendOutput(data.message);
+                        var resultClass = data.result === 'Fake' ? 'result-fake' : 'result-real';
+                        var barColor = data.result === 'Fake' ? '#f44336' : '#4CAF50';
+                        var conf = data.confidence || 0;
+                        var html = '<div class="result-section">';
+                        html += '<div><img class="result-image" src="data:image/jpeg;base64,' + data.image + '"></div>';
+                        html += '<div>';
+                        html += '<div class="result-label ' + resultClass + '">Currency is ' + data.result + '</div>';
+                        html += '<div class="confidence-bar"><div class="confidence-fill" style="width:' + conf + '%;background:' + barColor + '"></div></div>';
+                        html += '<div class="confidence-text">Confidence: ' + conf.toFixed(1) + '%</div>';
+                        html += '</div></div>';
+                        document.getElementById('resultArea').innerHTML = html;
+
+                        // Browser voice announcement
+                        if ('speechSynthesis' in window) {
+                            var utterance = new SpeechSynthesisUtterance('The currency is ' + data.result);
+                            utterance.rate = 0.9;
+                            utterance.volume = 1.0;
+                            window.speechSynthesis.speak(utterance);
+                        }
+                    } else {
+                        appendOutput(data.message);
+                    }
+                })
+                .catch(function(err) {
+                    detectBtn.disabled = false;
+                    appendOutput('Error: ' + err);
+                });
+        });
+
+        function showGraph() {
+            appendOutput('Loading graph data...');
+            document.getElementById('resultArea').innerHTML = '';
+            fetch('/graph', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.status === 'success') {
+                        appendOutput('CNN Accuracy & Loss Graph displayed below.');
+                        drawGraph(data.accuracy, data.loss);
+                    }
+                })
+                .catch(function(err) { appendOutput('Error: ' + err); });
+        }
+
+        function drawGraph(accuracy, loss) {
+            var canvas = document.getElementById('graphCanvas');
+            canvas.style.display = 'block';
+            var ctx = canvas.getContext('2d');
+            var w = canvas.width;
+            var h = canvas.height;
+            var padding = 60;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+
+            // Grid
+            ctx.strokeStyle = '#ddd';
+            ctx.lineWidth = 1;
+            for (var i = 0; i <= 10; i++) {
+                var y = padding + (h - 2 * padding) * (1 - i / 10);
+                ctx.beginPath();
+                ctx.moveTo(padding, y);
+                ctx.lineTo(w - padding, y);
+                ctx.stroke();
+                ctx.fillStyle = '#333';
+                ctx.font = '12px Times New Roman';
+                ctx.fillText((i / 10).toFixed(1), 20, y + 4);
+            }
+
+            var n = Math.max(accuracy.length, loss.length);
+            var stepX = (w - 2 * padding) / (n - 1);
+
+            // Loss line (red)
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (var i = 0; i < loss.length; i++) {
+                var x = padding + i * stepX;
+                var y = padding + (h - 2 * padding) * (1 - loss[i]);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw loss points
+            ctx.fillStyle = 'red';
+            for (var i = 0; i < loss.length; i++) {
+                var x = padding + i * stepX;
+                var y = padding + (h - 2 * padding) * (1 - loss[i]);
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Accuracy line (green)
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (var i = 0; i < accuracy.length; i++) {
+                var x = padding + i * stepX;
+                var y = padding + (h - 2 * padding) * (1 - accuracy[i]);
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw accuracy points
+            ctx.fillStyle = 'green';
+            for (var i = 0; i < accuracy.length; i++) {
+                var x = padding + i * stepX;
+                var y = padding + (h - 2 * padding) * (1 - accuracy[i]);
+                ctx.beginPath();
+                ctx.arc(x, y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // X-axis labels
+            ctx.fillStyle = '#333';
+            ctx.font = '12px Times New Roman';
+            for (var i = 0; i < n; i++) {
+                var x = padding + i * stepX;
+                ctx.fillText(i + 1, x - 4, h - 30);
+            }
+
+            // Title
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 18px Times New Roman';
+            ctx.fillText('CNN Accuracy & Loss', w / 2 - 90, 25);
+
+            // Axis labels
+            ctx.font = 'bold 14px Times New Roman';
+            ctx.fillText('Iterations', w / 2 - 30, h - 8);
+            ctx.save();
+            ctx.translate(12, h / 2 + 40);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Accuracy / Loss', 0, 0);
+            ctx.restore();
+
+            // Legend
+            ctx.fillStyle = 'red';
+            ctx.fillRect(w - 150, 15, 15, 15);
+            ctx.fillStyle = '#333';
+            ctx.font = '13px Times New Roman';
+            ctx.fillText('Loss', w - 130, 27);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(w - 150, 35, 15, 15);
+            ctx.fillStyle = '#333';
+            ctx.fillText('Accuracy', w - 130, 47);
+        }
+    </script>
+</body>
+</html>
